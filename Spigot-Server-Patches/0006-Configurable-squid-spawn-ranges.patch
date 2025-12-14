@@ -1,41 +1,78 @@
-From 6b5d69ae84764c2a11f03c5fd257486181017987 Mon Sep 17 00:00:00 2001
-From: Zach Brown <zach.brown@destroystokyo.com>
-Date: Sat, 7 Mar 2015 20:20:29 -0600
-Subject: [PATCH] Configurable squid spawn ranges
+From aec3947eeba33c80f737bd1a0beaae15b017b7a9 Mon Sep 17 00:00:00 2001
+From: Zach Brown <Zbob750@live.com>
+Date: Fri, 28 Nov 2014 00:35:56 -0600
+Subject: [PATCH] Vanished players don't have rights
 
 
-diff --git a/src/main/java/net/minecraft/server/EntitySquid.java b/src/main/java/net/minecraft/server/EntitySquid.java
-index 511bec7..31996b4 100644
---- a/src/main/java/net/minecraft/server/EntitySquid.java
-+++ b/src/main/java/net/minecraft/server/EntitySquid.java
-@@ -141,7 +141,8 @@ public class EntitySquid extends EntityWaterAnimal {
-     }
+diff --git a/src/main/java/net/minecraft/server/ItemBlock.java b/src/main/java/net/minecraft/server/ItemBlock.java
+index a4b50fe..14ea66d 100644
+--- a/src/main/java/net/minecraft/server/ItemBlock.java
++++ b/src/main/java/net/minecraft/server/ItemBlock.java
+@@ -29,7 +29,7 @@ public class ItemBlock extends Item {
+             return false;
+         } else if (blockposition.getY() == 255 && this.a.getMaterial().isBuildable()) {
+             return false;
+-        } else if (world.a(this.a, blockposition, false, enumdirection, (Entity) null, itemstack)) {
++        } else if (world.a(this.a, blockposition, false, enumdirection, entityhuman, itemstack)) { // PaperSpigot - Pass entityhuman instead of null
+             int i = this.filterData(itemstack.getData());
+             IBlockData iblockdata1 = this.a.getPlacedState(world, blockposition, enumdirection, f, f1, f2, i, entityhuman);
+
+diff --git a/src/main/java/net/minecraft/server/EntityArrow.java b/src/main/java/net/minecraft/server/EntityArrow.java
+index 7d1727d..1d8b138 100644
+--- a/src/main/java/net/minecraft/server/EntityArrow.java
++++ b/src/main/java/net/minecraft/server/EntityArrow.java
+@@ -221,6 +221,14 @@ public class EntityArrow extends Entity implements IProjectile {
+             float f3;
+             float f4;
  
-     public boolean bR() {
--        return this.locY > 45.0D && this.locY < (double) this.world.F() && super.bR();
-+        // PaperSpigot - Configurable squid spawn range
-+        return this.locY > this.world.paperSpigotConfig.squidMinSpawnHeight && this.locY < (double) this.world.paperSpigotConfig.squidMaxSpawnHeight && super.bR();
-     }
- 
-     public void b(float f, float f1, float f2) {
-diff --git a/src/main/java/org/github/paperspigot/PaperSpigotWorldConfig.java b/src/main/java/org/github/paperspigot/PaperSpigotWorldConfig.java
-index 0b47234..f3bbac8 100644
---- a/src/main/java/org/github/paperspigot/PaperSpigotWorldConfig.java
-+++ b/src/main/java/org/github/paperspigot/PaperSpigotWorldConfig.java
-@@ -81,4 +81,13 @@ public class PaperSpigotWorldConfig
-         allowUndeadHorseLeashing = getBoolean( "allow-undead-horse-leashing", false );
-         log( "Allow undead horse types to be leashed: " + allowUndeadHorseLeashing );
-     }
++            // PaperSpigot start - Allow arrows to fly through vanished players the shooter can't see
++            if (movingobjectposition != null && movingobjectposition.entity instanceof EntityPlayer && shooter != null && shooter instanceof EntityPlayer) {
++                if (!((EntityPlayer) shooter).getBukkitEntity().canSee(((EntityPlayer) movingobjectposition.entity).getBukkitEntity())) {
++                    movingobjectposition = null;
++                }
++            }
++            // PaperSpigot end
 +
-+    public double squidMinSpawnHeight;
-+    public double squidMaxSpawnHeight;
-+    private void squidSpawnHeight()
-+    {
-+        squidMinSpawnHeight = getDouble( "squid-spawn-height.minimum", 45.0D );
-+        squidMaxSpawnHeight = getDouble( "squid-spawn-height.maximum", 63.0D );
-+        log( "Squids will spawn between Y: " + squidMinSpawnHeight + " and Y: " + squidMaxSpawnHeight );
-+    }
- }
+             if (movingobjectposition != null) {
+                 org.bukkit.craftbukkit.event.CraftEventFactory.callProjectileHitEvent(this); // CraftBukkit - Call event
+                 
+diff --git a/src/main/java/net/minecraft/server/EntityProjectile.java b/src/main/java/net/minecraft/server/EntityProjectile.java
+index ce3e628..005e995 100644
+--- a/src/main/java/net/minecraft/server/EntityProjectile.java
++++ b/src/main/java/net/minecraft/server/EntityProjectile.java
+@@ -146,6 +146,14 @@ public abstract class EntityProjectile extends Entity implements IProjectile {
+             }
+         }
+ 
++        // PaperSpigot start - Allow projectiles to fly through vanished players the shooter can't see
++        if (movingobjectposition != null && movingobjectposition.entity instanceof EntityPlayer && shooter != null && shooter instanceof EntityPlayer) {
++            if (!((EntityPlayer) shooter).getBukkitEntity().canSee(((EntityPlayer) movingobjectposition.entity).getBukkitEntity())) {
++                movingobjectposition = null;
++            }
++        }
++        // PaperSpigot end
++
+         if (movingobjectposition != null) {
+             if (movingobjectposition.type == EnumMovingObjectType.BLOCK && this.world.getType(movingobjectposition.a()).getBlock() == Blocks.PORTAL) {
+                 this.aq();
+diff --git a/src/main/java/net/minecraft/server/World.java b/src/main/java/net/minecraft/server/World.java
+index 9cf1463..7b58d0c 100644
+--- a/src/main/java/net/minecraft/server/World.java
++++ b/src/main/java/net/minecraft/server/World.java
+@@ -1656,6 +1656,14 @@ public abstract class World implements IBlockAccess {
+         for (int i = 0; i < list.size(); ++i) {
+             Entity entity1 = (Entity) list.get(i);
+ 
++            // PaperSpigot start - Allow block placement if the placer cannot see the vanished blocker
++            if (entity instanceof EntityPlayer && entity1 instanceof EntityPlayer) {
++                if (!((EntityPlayer) entity).getBukkitEntity().canSee(((EntityPlayer) entity1).getBukkitEntity())) {
++                    continue;
++                }
++            }
++            // PaperSpigot end
++
+             if (!entity1.dead && entity1.k && entity1 != entity && (entity == null || entity.vehicle != entity1 && entity.passenger != entity1)) {
+                 return false;
+             }
 -- 
 1.9.1
-
